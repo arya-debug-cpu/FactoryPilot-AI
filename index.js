@@ -3,83 +3,106 @@
 Object.defineProperty(exports, "__esModule", {
   value: true
 });
-exports.default = parser;
-function _parser() {
-  const data = require("@babel/parser");
-  _parser = function () {
-    return data;
-  };
-  return data;
-}
-function _codeFrame() {
-  const data = require("@babel/code-frame");
-  _codeFrame = function () {
-    return data;
-  };
-  return data;
-}
-var _missingPluginHelper = require("./util/missing-plugin-helper.js");
-function* parser(pluginPasses, {
-  parserOpts,
-  highlightCode = true,
-  filename = "unknown"
-}, code) {
-  try {
-    const results = [];
-    for (const plugins of pluginPasses) {
-      for (const plugin of plugins) {
-        const {
-          parserOverride
-        } = plugin;
-        if (parserOverride) {
-          const ast = parserOverride(code, parserOpts, _parser().parse);
-          if (ast !== undefined) results.push(ast);
-        }
-      }
+exports.default = void 0;
+exports.generate = generate;
+var _sourceMap = require("./source-map.js");
+var _printer = require("./printer.js");
+function normalizeOptions(code, opts, ast) {
+  var _opts$recordAndTupleS;
+  if (opts.experimental_preserveFormat) {
+    if (typeof code !== "string") {
+      throw new Error("`experimental_preserveFormat` requires the original `code` to be passed to @babel/generator as a string");
     }
-    if (results.length === 0) {
-      return (0, _parser().parse)(code, parserOpts);
-    } else if (results.length === 1) {
-      yield* [];
-      if (typeof results[0].then === "function") {
-        throw new Error(`You appear to be using an async parser plugin, ` + `which your current version of Babel does not support. ` + `If you're using a published plugin, you may need to upgrade ` + `your @babel/core version.`);
-      }
-      return results[0];
+    if (!opts.retainLines) {
+      throw new Error("`experimental_preserveFormat` requires `retainLines` to be set to `true`");
     }
-    throw new Error("More than one plugin attempted to override parsing.");
-  } catch (err) {
-    if (err.code === "BABEL_PARSER_SOURCETYPE_MODULE_REQUIRED") {
-      err.message += "\nConsider renaming the file to '.mjs', or setting sourceType:module " + "or sourceType:unambiguous in your Babel config for this file.";
+    if (opts.compact && opts.compact !== "auto") {
+      throw new Error("`experimental_preserveFormat` is not compatible with the `compact` option");
     }
-    const startLine = parserOpts == null ? void 0 : parserOpts.startLine;
-    const startColumn = parserOpts == null ? void 0 : parserOpts.startColumn;
-    if (startColumn != null) {
-      code = " ".repeat(startColumn) + code;
+    if (opts.minified) {
+      throw new Error("`experimental_preserveFormat` is not compatible with the `minified` option");
     }
-    const {
-      loc,
-      missingPlugin
-    } = err;
-    if (loc) {
-      const codeFrame = (0, _codeFrame().codeFrameColumns)(code, {
-        start: {
-          line: loc.line,
-          column: loc.column + 1
-        }
-      }, {
-        highlightCode,
-        startLine
-      });
-      if (missingPlugin) {
-        err.message = `${filename}: ` + (0, _missingPluginHelper.default)(missingPlugin[0], loc, codeFrame, filename);
-      } else {
-        err.message = `${filename}: ${err.message}\n\n` + codeFrame;
-      }
-      err.code = "BABEL_PARSE_ERROR";
+    if (opts.jsescOption) {
+      throw new Error("`experimental_preserveFormat` is not compatible with the `jsescOption` option");
     }
-    throw err;
+    if (!Array.isArray(ast.tokens)) {
+      throw new Error("`experimental_preserveFormat` requires the AST to have attached the token of the input code. Make sure to enable the `tokens: true` parser option.");
+    }
   }
+  const format = {
+    auxiliaryCommentBefore: opts.auxiliaryCommentBefore,
+    auxiliaryCommentAfter: opts.auxiliaryCommentAfter,
+    shouldPrintComment: opts.shouldPrintComment,
+    preserveFormat: opts.experimental_preserveFormat,
+    retainLines: opts.retainLines,
+    retainFunctionParens: opts.retainFunctionParens,
+    comments: opts.comments == null || opts.comments,
+    compact: opts.compact,
+    minified: opts.minified,
+    concise: opts.concise,
+    indent: {
+      adjustMultilineComment: true,
+      style: "  "
+    },
+    jsescOption: Object.assign({
+      quotes: "double",
+      wrap: true,
+      minimal: false
+    }, opts.jsescOption),
+    topicToken: opts.topicToken
+  };
+  format.decoratorsBeforeExport = opts.decoratorsBeforeExport;
+  format.jsescOption.json = opts.jsonCompatibleStrings;
+  format.recordAndTupleSyntaxType = (_opts$recordAndTupleS = opts.recordAndTupleSyntaxType) != null ? _opts$recordAndTupleS : "hash";
+  format.importAttributesKeyword = opts.importAttributesKeyword;
+  if (format.minified) {
+    format.compact = true;
+    format.shouldPrintComment = format.shouldPrintComment || (() => format.comments);
+  } else {
+    format.shouldPrintComment = format.shouldPrintComment || (value => format.comments || value.includes("@license") || value.includes("@preserve"));
+  }
+  if (format.compact === "auto") {
+    format.compact = typeof code === "string" && code.length > 500000;
+    if (format.compact) {
+      console.error("[BABEL] Note: The code generator has deoptimised the styling of " + `${opts.filename} as it exceeds the max of ${"500KB"}.`);
+    }
+  }
+  if (format.compact || format.preserveFormat) {
+    format.indent.adjustMultilineComment = false;
+  }
+  const {
+    auxiliaryCommentBefore,
+    auxiliaryCommentAfter,
+    shouldPrintComment
+  } = format;
+  if (auxiliaryCommentBefore && !shouldPrintComment(auxiliaryCommentBefore)) {
+    format.auxiliaryCommentBefore = undefined;
+  }
+  if (auxiliaryCommentAfter && !shouldPrintComment(auxiliaryCommentAfter)) {
+    format.auxiliaryCommentAfter = undefined;
+  }
+  return format;
 }
-0 && 0;
+exports.CodeGenerator = class CodeGenerator {
+  constructor(ast, opts = {}, code) {
+    this._ast = void 0;
+    this._format = void 0;
+    this._map = void 0;
+    this._ast = ast;
+    this._format = normalizeOptions(code, opts, ast);
+    this._map = opts.sourceMaps ? new _sourceMap.default(opts, code) : null;
+  }
+  generate() {
+    const printer = new _printer.default(this._format, this._map);
+    return printer.generate(this._ast);
+  }
+};
+function generate(ast, opts = {}, code) {
+  const format = normalizeOptions(code, opts, ast);
+  const map = opts.sourceMaps ? new _sourceMap.default(opts, code) : null;
+  const printer = new _printer.default(format, map, ast.tokens, typeof code === "string" ? code : null);
+  return printer.generate(ast);
+}
+var _default = exports.default = generate;
 
 //# sourceMappingURL=index.js.map
