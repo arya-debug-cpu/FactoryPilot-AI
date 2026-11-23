@@ -1,0 +1,38 @@
+{
+  "title": "Masky",
+  "protocol": "tool_masky://",
+  "prefix": "masky",
+  "plans": null,
+  "capabilities": 68608,
+  "classType": [
+    "video",
+    "tool"
+  ],
+  "actions": 0,
+  "description": "Masky AI avatars that speak, plus scene video, images and live conversations.\nUse it as an agent tool covering the Masky API, or as a pipeline step that turns text into a talking head, a scene clip, an image or a live-conversation turn.\nRequires a Masky API key from https://masky.ai/developer",
+  "lanes": {
+    "answers": [
+      "video",
+      "audio",
+      "image",
+      "text"
+    ],
+    "questions": [
+      "video",
+      "audio",
+      "image",
+      "text"
+    ],
+    "text": [
+      "video",
+      "audio",
+      "image",
+      "text"
+    ]
+  },
+  "tile": [
+    "Masky: ${parameters.tool_masky.action}"
+  ],
+  "documentation": "https://docs.rocketride.org/nodes/tool_masky",
+  "icon": "105"
+}
